@@ -1,0 +1,27 @@
+{
+  "name": "front-tracker",
+  "version": "1.0.1",
+  "description": "",
+  "main": "dist/cjs/index.js",
+  "module": "dist/esm/index.js",
+  "browser": "dist/umd/front-tracker.min.js",
+  "typings": "dist/cjs/index.d.ts",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/hj5914/front-tracker.git"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "father build",
+    "test": "father doctor"
+  },
+  "keywords": [],
+  "author": "huangjie",
+  "license": "MIT",
+  "devDependencies": {
+    "father": "^4.3.8",
+    "typescript": "^5.3.3"
+  }
+}
