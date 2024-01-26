@@ -174,7 +174,7 @@ class Tracker {
       method?: string;
     }, e: ProgressEvent<XMLHttpRequestEventTarget>) {
       const { type, timeStamp } = e
-      const { requestUrl, status, method, timeout, timeStampCompute } = this
+      const { requestUrl, status, method, timeout } = this
       if (type === 'loadstart') this.timeStampCompute = timeStamp
       if (type === 'loadend') {
         this.timeStampCompute = timeStamp - (this.timeStampCompute || 0)
@@ -182,7 +182,7 @@ class Tracker {
         if (status !== 200) responseText = this.responseText
         that.sendData({
           type: 'ajaxTracker',
-          status, timeout, responseText, method, requestUrl, timeStampCompute
+          status, timeout, responseText, method, requestUrl, timeStampCompute: this.timeStampCompute
         })
       }
     }
