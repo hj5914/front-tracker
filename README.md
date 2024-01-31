@@ -24,7 +24,7 @@ import Tracker from 'front-tracker';
  * @jsError js 报错异常上报
  * @ajaxTracker 请求上报
 */
-export const tracker = Tracker({
+const tracker = Tracker({
   project: '1',
   requestUrl: '',
   historyTracker: true,
@@ -33,12 +33,23 @@ export const tracker = Tracker({
   jsError: true,
   ajaxTracker: true
 })
+
+export default tracker
 ```
 
 #### 项目入口文件
 ```js
 // app.js
 import './tracker'
+...
+```
+
+#### 加入用户标识符
+```js
+import tracker from './tracker'
+
+...
+tracker.setUser(() => localStorage.getItem('userId'))
 ...
 ```
 
@@ -54,7 +65,7 @@ function (){
 
 #### 使用 自定义上报
 ```js
-import { tracker } from './tracker'
+import tracker from './tracker'
 
 tracker.customSendData({
   type: 'anyType',

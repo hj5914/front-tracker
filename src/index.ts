@@ -7,7 +7,7 @@
  * @jsError js 报错异常上报
  * @ajaxTracker 请求上报
 */
-export interface TrackerDefaultOptions {
+interface TrackerDefaultOptions {
   requestUrl: string | undefined,
   historyTracker: boolean,
   hashTracker: boolean,
@@ -18,20 +18,32 @@ export interface TrackerDefaultOptions {
 }
 
 // 用户必传参数
-export interface TrackerOptions extends Partial<TrackerDefaultOptions> {
+interface TrackerOptions extends Partial<TrackerDefaultOptions> {
   requestUrl: string,
   project: string
 }
 
 type SendErrorBaseType = {
-  time: number,
   url: string,
   project: string
 }
+type HistoryTrackerType = {
+  type: 'historyChange',
+  action: keyof History
+}
+type HashTrackerType = {
+  type: 'hashchange',
+  oldURL: string
+}
+type DomTrackerType = {
+  type: 'dom';
+  action: 'click'
+  message: string;
+}
 type SourceErrorType = {
   type: 'sourceError';
-  source: string;
   tagName: string;
+  source: string;
 }
 type JsErrorType = {
   type: 'jsError';
@@ -39,18 +51,6 @@ type JsErrorType = {
   filename: string;
   colno: number;
   lineno: number;
-}
-type HistoryTrackerType = {
-  type: 'history.pushState' | 'history.replaceState'
-}
-type HashTrackerType = {
-  type: 'hashchange',
-  oldURL: string
-  
-}
-type DomTrackerType = {
-  type: 'dom.click';
-  targetKey: string;
 }
 type AjaxTracker = {
   type: 'ajaxTracker';
@@ -65,45 +65,53 @@ type CustomDataType = {
   type: string;
   [key: string]: any
 }
-type SendDataType = SourceErrorType | HistoryTrackerType | DomTrackerType | JsErrorType | AjaxTracker | CustomDataType | HashTrackerType
 
+type UserId = string | number | undefined
 class Tracker {
-  #sdkVersion:string = 'v1.0.0'
-  #data:TrackerOptions
-  #historyType: Partial<keyof History>[] = ['pushState', 'replaceState']
+  private getUser: () => UserId = () => undefined
+  private requestUrl: string = ''
+  private project: string = ''
 
   public constructor(trackerOptions: TrackerOptions) {
-    this.#data = Object.assign(this.initConfig(), trackerOptions)// 初始化配置对象
-    this.installExtra()
+    if (!trackerOptions) return
+    const { requestUrl, project } = trackerOptions
+    if (!requestUrl || !project) return
+    this.requestUrl = requestUrl
+    this.project = project
+
+    trackerOptions.historyTracker && this.historyTracker()
+    trackerOptions.hashTracker && this.hashTracker()
+    trackerOptions.domTracker && this.domTracker()
+    trackerOptions.jsError && this.jsError()
+    trackerOptions.ajaxTracker && this.ajaxTracker()
+  }
+  
+  // 配置用户信息
+  public setUser(callback: typeof this.getUser) { 
+    this.getUser = callback
   }
 
-  // 初始化配置项
-  private initConfig():TrackerDefaultOptions {
-    return <TrackerDefaultOptions>{
-      sdkVersion: this.#sdkVersion,
-      historyTracker: false,
-      hashTracker: false,
-      domTracker: false,
-      jsError: false
-    }
-  }
+  // 自定义上报
+  public customSendData(data: CustomDataType) {
+    this.sendData<CustomDataType>(data)
+  } 
 
   // 数据上报
-  public customSendData(data: SendDataType) {
-    this.sendData(data)
-  } 
-  private sendData(data: SendDataType) {
-    const params: SendDataType & SendErrorBaseType = Object.assign({}, data, {
-      time: Date.now(),
+  private sendData<T>(data: T) {
+    const params: T & SendErrorBaseType = Object.assign({}, data, {
       url: window.location.href,
-      project: this.#data.project
+      project: this.project,
+      userId: this.getUser()
     })
     const formData = new FormData()
     Object.entries(params).forEach(([key, value]) => formData.append(key, value + ''))
-    navigator.sendBeacon(this.#data.requestUrl, formData)
+    navigator.sendBeacon(this.requestUrl, formData)
   } 
+
+  // history监听
   private historyTracker() {
-    this.#historyType.forEach((item:keyof History) => {
+    const historyType: Partial<keyof History>[] = ['pushState', 'replaceState']
+    historyType.forEach((item: keyof History) => {
       let origin = history[item]
       let eventHistory = new Event(item);
       (window.history[item] as any) = function(this: any) {
@@ -111,32 +119,38 @@ class Tracker {
         window.dispatchEvent(eventHistory)
       }
       window.addEventListener(item, () => {
-        this.sendData({
-          type: `history.${item}` as HistoryTrackerType['type']
+        this.sendData<HistoryTrackerType>({
+          type: `historyChange`,
+          action: item
         })
       })
     })
   }
 
+  // hash监听
   private hashTracker() { 
     window.addEventListener('hashchange', (e: HashChangeEvent) => {
-      this.sendData({
+      this.sendData<HashTrackerType>({
         type: `hashchange`,
         oldURL: e.oldURL
       })
     })
   }
 
+  // dom点击监听
   private domTracker() {
     window.addEventListener('click', e => {
       let element = e.target as HTMLElement
-      let targetKey = element.getAttribute('data-tracker')
-      if (targetKey) {
-        this.sendData({ type: `dom.click`, targetKey })
-      }
+      let message = element.getAttribute('data-tracker')
+      message && this.sendData<DomTrackerType>({
+        type: `dom`,
+        action: 'click',
+        message
+      })
     })
   }
 
+  // js报错监听
   private jsError() {
     window.addEventListener('error', (e: ErrorEvent | Event) => {
       e.preventDefault()
@@ -144,21 +158,23 @@ class Tracker {
         if (e.error.hasBeenCaught !== undefined) return false
         e.error.hasBeenCaught = true
         const { colno, lineno, filename, message } = e
-        this.sendData({ type: 'jsError', colno, lineno, filename, message })
+        this.sendData<JsErrorType>({
+          type: 'jsError',
+          colno, lineno, filename, message
+        })
       } else { 
         const target = e.target as HTMLElement
         const source = target.getAttribute('src') || target.getAttribute('href')
-        source && this.sendData({
+        source && this.sendData<SourceErrorType>({
           type: 'sourceError',
-          source,
-          tagName: target.tagName
+          source, tagName: target.tagName
         })
       }
     }, true)
   }
 
+  // 请求监听
   private ajaxTracker() {
-    // eslint-disable-next-line @typescript-eslint/no-this-alias
     const that = this
     const ajaxType: (keyof XMLHttpRequestEventTargetEventMap)[] = [
       'loadstart', // 接收到响应数据时触发
@@ -180,9 +196,10 @@ class Tracker {
         this.timeStampCompute = timeStamp - (this.timeStampCompute || 0)
         let responseText = ''
         if (status !== 200) responseText = this.responseText
-        that.sendData({
+        that.sendData<AjaxTracker>({
           type: 'ajaxTracker',
-          status, timeout, responseText, method, requestUrl, timeStampCompute: this.timeStampCompute
+          timeStampCompute: this.timeStampCompute,
+          status, timeout, responseText, method, requestUrl 
         })
       }
     }
@@ -201,29 +218,6 @@ class Tracker {
         this.requestUrl = (arguments[1] as string).split('?')[0]
         return oldOpen.apply(this, arguments as unknown as Parameters<typeof oldOpen>)
       }
-    }
-  }
-
-  public installExtra() {
-    // hash
-    if (this.#data.hashTracker) {
-      this.hashTracker()
-    }
-    // history
-    if (this.#data.historyTracker) {
-      this.historyTracker()
-    }
-    // dom手动上报
-    if (this.#data.domTracker) {
-      this.domTracker()
-    }
-    // jsError
-    if (this.#data.jsError) {
-      this.jsError()
-    }
-    // ajaxInfo
-    if (this.#data.ajaxTracker) {
-      this.ajaxTracker()
     }
   }
 }
