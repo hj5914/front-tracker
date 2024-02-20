@@ -1,3 +1,4 @@
+import info from './info'
 /**
  * @project 项目标识符
  * @requestUrl 接口地址
@@ -101,7 +102,8 @@ class Tracker {
     const params: T & SendErrorBaseType = Object.assign({}, data, {
       url: window.location.href,
       project: this.project,
-      userId: this.getUser()
+      userId: this.getUser(),
+      ...info
     })
     const formData = new FormData()
     Object.entries(params).forEach(([key, value]) => formData.append(key, value + ''))
